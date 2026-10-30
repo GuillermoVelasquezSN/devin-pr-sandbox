@@ -1,36 +1,53 @@
 ﻿name: Devin Review Gate
 
 on:
-  # Se dispara cuando el bot de Devin publica su revisión o comentarios en el PR
+  pull_request:
+    types: [opened, synchronize, reopened]
   pull_request_review:
     types: [submitted]
-  pull_request:
-    types: [opened, synchronize]
 
 permissions:
   contents: read
   pull-requests: read
+  checks: read
+  statuses: read
 
 jobs:
   evaluate-devin-findings:
     name: Devin AI - Quality Gate (Strict)
     runs-on: ubuntu-latest
-    # Sin continue-on-error para que sí pueda marcar la EQUIS ROJA (X)
 
     steps:
-      - name: Verificar hallazgos de devin-ai-integration
+      - name: Esperar análisis de Devin y verificar hallazgos
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           PR_NUM: ${{ github.event.pull_request.number }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          echo "🔍 Verificando comentarios de revisión de devin-ai-integration en el PR #$PR_NUM..."
+          echo "🔍 Evaluando PR #$PR_NUM (Disparado por: $EVENT_NAME)..."
 
-          # Consultamos a la API de GitHub cuántos comentarios inline ha dejado el bot de Devin en este PR
+          # Si el PR recién se abrió o actualizó, damos margen para que Devin Cloud termine de comentar
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            echo "⏳ Esperando a que devin-ai-integration publique su revisión automática..."
+            for i in {1..12}; do
+              DEVIN_COMMENTS=$(gh api "repos/$REPO/pulls/$PR_NUM/comments" \
+                --jq '[.[] | select(.user.login | startswith("devin-ai"))] | length')
+              
+              if [ "$DEVIN_COMMENTS" -gt 0 ]; then
+                echo "⚡ Comentarios de Devin detectados en el intento $i."
+                break
+              fi
+              echo "Intento $i/12: Aún sin comentarios, esperando 10s..."
+              sleep 10
+            done
+          fi
+
+          # Conteo final de comentarios inline dejados por el bot de Devin
           DEVIN_COMMENTS=$(gh api "repos/$REPO/pulls/$PR_NUM/comments" \
-            --jq '[.[] | select(.user.login == "devin-ai-integration[bot]")] | length')
+            --jq '[.[] | select(.user.login | startswith("devin-ai"))] | length')
 
-          echo "Comentarios de problemas encontrados por Devin: $DEVIN_COMMENTS"
+          echo "📊 Total de problemas encontrados por Devin: $DEVIN_COMMENTS"
 
           if [ "$DEVIN_COMMENTS" -gt 0 ]; then
             echo "❌ Se rechazó el Check: devin-ai-integration encontró $DEVIN_COMMENTS problema(s) en el código."
