@@ -14,26 +14,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Verificar hallazgos de devin-ai-integration
+      - name: Evaluate Devin AI review findings
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           PR_NUM: ${{ github.event.pull_request.number }}
         run: |
-          echo "🔍 Evaluando revisión publicada en el PR #$PR_NUM..."
+          echo "Evaluating published review on PR #$PR_NUM..."
 
           DEVIN_COMMENTS=$(gh api "repos/$REPO/pulls/$PR_NUM/comments" \
             --jq '[.[] | select(.user.login | startswith("devin-ai"))] | length')
 
-          echo "📊 Total de problemas encontrados por Devin: $DEVIN_COMMENTS"
+          echo "Total issues found by Devin: $DEVIN_COMMENTS"
 
           if [ "$DEVIN_COMMENTS" -gt 0 ]; then
-            echo "❌ Se rechazó el Check: devin-ai-integration encontró $DEVIN_COMMENTS problema(s) en el código."
+            echo "❌ Check rejected: devin-ai-integration found $DEVIN_COMMENTS issue(s) in the code."
             echo "### ❌ Devin Quality Gate: FAILED" >> $GITHUB_STEP_SUMMARY
-            echo "El bot **devin-ai-integration** detectó **$DEVIN_COMMENTS** vulnerabilidad(es) o bug(s) en las líneas del PR." >> $GITHUB_STEP_SUMMARY
+            echo "The **devin-ai-integration** bot detected **$DEVIN_COMMENTS** vulnerability or bug comment(s) in this PR." >> $GITHUB_STEP_SUMMARY
+            echo "Please resolve or fix the reported issues before merging." >> $GITHUB_STEP_SUMMARY
             exit 1
           else
-            echo "✅ Sin observaciones activas de Devin."
+            echo "✅ No active issues reported by Devin."
             echo "### ✅ Devin Quality Gate: PASSED" >> $GITHUB_STEP_SUMMARY
             exit 0
           fi
