@@ -32,7 +32,7 @@ jobs:
           REPO_NAME: ${{ github.event.repository.name }}
           PR_NUM: ${{ github.event.pull_request.number }}
           EVENT_NAME: ${{ github.event_name }}
-          BOT_PREFIX: "devin"
+          BOT_PREFIX: "devin-ai"
           MAX_WAIT_ATTEMPTS: 24
           WAIT_SECONDS: 10
         run: |
