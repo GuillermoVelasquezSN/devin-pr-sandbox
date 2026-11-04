@@ -1,8 +1,12 @@
 ﻿name: Devin Review Gate
 
 on:
-  pull_request_review:
-    types: [submitted]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: devin-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -14,23 +18,45 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Evaluate Devin AI review findings
+      - name: Wait for Devin analysis and evaluate active threads
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
           PR_NUM: ${{ github.event.pull_request.number }}
         run: |
-          echo "Evaluating published review on PR #$PR_NUM..."
+          echo "Waiting 40 seconds for Devin Cloud to analyze the commit on PR #$PR_NUM..."
+          sleep 40
 
-          DEVIN_COMMENTS=$(gh api "repos/$REPO/pulls/$PR_NUM/comments" \
-            --jq '[.[] | select(.user.login | startswith("devin-ai"))] | length')
+          # Count only unresolved and non-outdated review threads created by the Devin bot
+          DEVIN_COMMENTS=$(gh api graphql -f query='
+            query($owner: String!, $name: String!, $pr: Int!) {
+              repository(owner: $owner, name: $name) {
+                pullRequest(number: $pr) {
+                  reviewThreads(first: 100) {
+                    nodes {
+                      isResolved
+                      isOutdated
+                      comments(first: 1) {
+                        nodes {
+                          author {
+                            login
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }' -f owner="$OWNER" -f name="$REPO_NAME" -F pr="$PR_NUM" \
+            --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false and .isOutdated == false) | select(.comments.nodes[0].author.login | startswith("devin-ai"))] | length')
 
-          echo "Total issues found by Devin: $DEVIN_COMMENTS"
+          echo "Total active issues found by Devin: $DEVIN_COMMENTS"
 
           if [ "$DEVIN_COMMENTS" -gt 0 ]; then
-            echo "❌ Check rejected: devin-ai-integration found $DEVIN_COMMENTS issue(s) in the code."
+            echo "❌ Check rejected: devin-ai-integration has $DEVIN_COMMENTS active issue(s) in the code."
             echo "### ❌ Devin Quality Gate: FAILED" >> $GITHUB_STEP_SUMMARY
-            echo "The **devin-ai-integration** bot detected **$DEVIN_COMMENTS** vulnerability or bug comment(s) in this PR." >> $GITHUB_STEP_SUMMARY
+            echo "The **devin-ai-integration** bot has **$DEVIN_COMMENTS** active vulnerability or bug thread(s) in this PR." >> $GITHUB_STEP_SUMMARY
             echo "Please resolve or fix the reported issues before merging." >> $GITHUB_STEP_SUMMARY
             exit 1
           else
