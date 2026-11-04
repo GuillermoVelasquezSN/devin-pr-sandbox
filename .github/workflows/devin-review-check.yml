@@ -3,6 +3,8 @@
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  pull_request_review:
+    types: [submitted]
 
 concurrency:
   group: devin-gate-${{ github.event.pull_request.number }}
@@ -17,6 +19,9 @@ jobs:
     name: Devin AI - Quality Gate (Strict)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    if: >-
+      github.event_name == 'pull_request' ||
+      startsWith(github.event.review.user.login, 'devin-ai')
 
     steps:
       - name: Evaluate active review threads from Devin
@@ -25,12 +30,13 @@ jobs:
           OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
           PR_NUM: ${{ github.event.pull_request.number }}
+          EVENT_NAME: ${{ github.event_name }}
           BOT_PREFIX: "devin-ai"
           MAX_WAIT_ATTEMPTS: 30
           WAIT_SECONDS: 10
         run: |
           set -euo pipefail
-          echo "Evaluating PR #$PR_NUM..."
+          echo "Evaluating PR #$PR_NUM (Triggered by event: $EVENT_NAME)..."
 
           REVIEW_QUERY='
             query($owner: String!, $name: String!, $pr: Int!) {
