@@ -1,12 +1,16 @@
+// 1. Usamos number[] en lugar de any[] para cumplir con la regla estricta de tipado
 const db = {
-  query: async (sql: string, params: any[]) => {
-    return { rows: [{ id: params[0], username: 'testuser', email: 'test@example.com' }] };
+  query: async (sql: string, params: number[]) => {
+    if (params[0] === 1) {
+      return { rows: [{ id: 1, username: 'testuser', email: 'test@example.com' }] };
+    }
+    return { rows: [] };
   }
 };
 
 class UserService {
   static async getUserById(userId: number) {
-    if (!userId || userId <= 0) {
+    if (!Number.isSafeInteger(userId) || userId <= 0) {
       throw new Error("Invalid user ID provided");
     }
 
